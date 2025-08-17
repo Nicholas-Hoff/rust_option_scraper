@@ -1,18 +1,28 @@
-mod riskfreerate_lib;
 mod optionscraper;
+mod riskfreerate_lib;
 
 use optionscraper::OptionScraper;
+use std::io::{self, Write};
 
 fn main() -> Result<(), String> {
-    let sc = OptionScraper::new("SPY")?;
+    // Prompt the user for a ticker symbol instead of using a hard-coded value
+    print!("Enter ticker symbol: ");
+    io::stdout().flush().map_err(|e| e.to_string())?;
+    let mut ticker = String::new();
+    io::stdin()
+        .read_line(&mut ticker)
+        .map_err(|e| e.to_string())?;
+    let ticker = ticker.trim();
+    if ticker.is_empty() {
+        return Err("ticker cannot be empty".to_string());
+    }
+
+    let sc = OptionScraper::new(ticker)?;
     let rows = sc.scrape_data()?;
 
-    // Print a few rows
+    // Print all fields for each option row
     for r in rows.iter() {
-        println!(
-            "{} {} {} exp={} rfr={:.4} spot={:.2} ts_cst={}",
-            r.ticker, r.contract_type, r.strike_price, r.expiration_date, r.risk_free_rate, r.spot_price, r.data_update_time_cst
-        );
+        println!("{:#?}", r);
     }
     Ok(())
 }
