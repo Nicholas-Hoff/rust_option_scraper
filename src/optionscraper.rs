@@ -4,6 +4,7 @@ use chrono::{Datelike, Duration as ChronoDuration, NaiveDate, NaiveDateTime, Utc
 use chrono_tz::America::Chicago;
 use regex::Regex;
 use reqwest::blocking::Client;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -421,6 +422,7 @@ impl OptionScraper {
                 spot_price,
                 data_update_time: ts_raw.clone(), // <— clone per row
                 data_update_time_cst: ts_cst.clone(), // <— clone per row
+                active: true,
             });
         }
 
@@ -430,7 +432,7 @@ impl OptionScraper {
 
 // =============== Return row (like a DataFrame row) ===============
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OptionRow {
     pub option: String,
     pub contract_type: String, // "C" or "P"
@@ -480,6 +482,7 @@ pub struct OptionRow {
     pub spot_price: f64,
     pub data_update_time: String,
     pub data_update_time_cst: String,
+    pub active: bool,
 }
 
 // =============== Internal shaping structs ===============
