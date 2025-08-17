@@ -68,8 +68,9 @@ fn save_with_change_capture(ticker: &str, rows: &[OptionRow]) -> Result<(), Stri
         for k in keys {
             match (prev_map.get(&k), curr_map.get(&k)) {
                 (Some(old), Some(new)) => {
-                    if old != new {
-                        changes.extend(diff_rows(old, new));
+                    let diffs = diff_rows(old, new);
+                    if !diffs.is_empty() {
+                        changes.extend(diffs);
                     }
                 }
                 (None, Some(new)) => {
@@ -122,12 +123,23 @@ struct ChangeRecord {
     new_active: bool,
 }
 
+const IGNORED_FIELDS: &[&str] = &[
+    "data_update_time",
+    "data_update_time_cst",
+    "years_till_expire",
+    "risk_free_rate",
+    "active",
+];
+
 fn diff_rows(old: &OptionRow, new: &OptionRow) -> Vec<ChangeRecord> {
     let old_val = serde_json::to_value(old).unwrap_or(Value::Null);
     let new_val = serde_json::to_value(new).unwrap_or(Value::Null);
     let mut diffs = Vec::new();
     if let (Value::Object(o_map), Value::Object(n_map)) = (old_val, new_val) {
         for (k, o_v) in o_map.iter() {
+            if IGNORED_FIELDS.contains(&k.as_str()) {
+                continue;
+            }
             if let Some(n_v) = n_map.get(k) {
                 if o_v != n_v {
                     diffs.push(ChangeRecord {
@@ -135,8 +147,8 @@ fn diff_rows(old: &OptionRow, new: &OptionRow) -> Vec<ChangeRecord> {
                         field: k.clone(),
                         old_value: o_v.clone(),
                         new_value: n_v.clone(),
-                        old_active: false,
-                        new_active: true,
+                        old_active: old.active,
+                        new_active: new.active,
                     });
                 }
             }
