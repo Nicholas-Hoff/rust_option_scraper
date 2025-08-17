@@ -44,10 +44,10 @@ impl OptionScraper {
 
         let rfr = RiskFreeRate::load_default().unwrap_or_default();
 
-        let re_type = Regex::new(r"\d([A-Z])\d").unwrap();         // C/P
+        let re_type = Regex::new(r"\d([A-Z])\d").unwrap(); // C/P
         let re_strike = Regex::new(r"\d[A-Z](\d+)\d{3}").unwrap(); // strike dollars (drop last 3)
-        let re_exp = Regex::new(r"[A-Z](\d{6})").unwrap();         // YYMMDD after C/P
-        let re_ticker = Regex::new(r"^(\D*)").unwrap();            // leading non-digits
+        let re_exp = Regex::new(r"[A-Z](\d{6})").unwrap(); // YYMMDD after C/P
+        let re_ticker = Regex::new(r"^(\D*)").unwrap(); // leading non-digits
 
         Ok(Self {
             ticker: ticker.into(),
@@ -81,7 +81,14 @@ impl OptionScraper {
 
     /// Try several likely timestamp fields; fall back to None.
     fn pick_timestamp_utc(&self, data: &Value) -> Option<String> {
-        for k in ["timestamp", "time", "updated", "last_updated", "as_of", "quote_time"] {
+        for k in [
+            "timestamp",
+            "time",
+            "updated",
+            "last_updated",
+            "as_of",
+            "quote_time",
+        ] {
             if let Some(s) = data.get(k).and_then(|v| v.as_str()) {
                 if !s.is_empty() {
                     return Some(s.to_string());
@@ -89,7 +96,14 @@ impl OptionScraper {
             }
         }
         if let Some(q) = data.get("quote") {
-            for k in ["timestamp", "time", "updated", "last_updated", "as_of", "quote_time"] {
+            for k in [
+                "timestamp",
+                "time",
+                "updated",
+                "last_updated",
+                "as_of",
+                "quote_time",
+            ] {
                 if let Some(s) = q.get(k).and_then(|v| v.as_str()) {
                     if !s.is_empty() {
                         return Some(s.to_string());
@@ -118,8 +132,14 @@ impl OptionScraper {
         // ---- fetch JSON from Cboe (try plain, then underscore form) ----
         let t = self.ticker.to_uppercase();
         let urls = [
-            format!("https://cdn.cboe.com/api/global/delayed_quotes/options/{}.json", t),
-            format!("https://cdn.cboe.com/api/global/delayed_quotes/options/_{}.json", t),
+            format!(
+                "https://cdn.cboe.com/api/global/delayed_quotes/options/{}.json",
+                t
+            ),
+            format!(
+                "https://cdn.cboe.com/api/global/delayed_quotes/options/_{}.json",
+                t
+            ),
         ];
 
         let raw_text = {
@@ -174,7 +194,9 @@ impl OptionScraper {
         let ts_raw = self
             .pick_timestamp_utc(data)
             .unwrap_or_else(|| Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());
-        let ts_cst = self.flex_to_chicago(&ts_raw).unwrap_or_else(|_| ts_raw.clone());
+        let ts_cst = self
+            .flex_to_chicago(&ts_raw)
+            .unwrap_or_else(|_| ts_raw.clone());
 
         // Options array
         let opts = data
@@ -225,6 +247,41 @@ impl OptionScraper {
             let gamma = v.get("gamma").and_then(|x| x.as_f64()).unwrap_or(0.0);
             let delta = v.get("delta").and_then(|x| x.as_f64()).unwrap_or(0.0);
             let open_interest = v.get("open_interest").and_then(|x| x.as_u64()).unwrap_or(0);
+            let bid = v.get("bid").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let bid_size = v.get("bid_size").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let ask = v.get("ask").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let ask_size = v.get("ask_size").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let vega = v.get("vega").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let theta = v.get("theta").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let rho = v.get("rho").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let theo = v.get("theo").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let change = v.get("change").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let open = v.get("open").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let high = v.get("high").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let low = v.get("low").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let tick = v
+                .get("tick")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let last_trade_price = v
+                .get("last_trade_price")
+                .and_then(|x| x.as_f64())
+                .unwrap_or(0.0);
+            let last_trade_time = v
+                .get("last_trade_time")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let percent_change = v
+                .get("percent_change")
+                .and_then(|x| x.as_f64())
+                .unwrap_or(0.0);
+            let prev_day_close = v
+                .get("prev_day_close")
+                .and_then(|x| x.as_f64())
+                .unwrap_or(0.0);
+            let volume = v.get("volume").and_then(|x| x.as_f64()).unwrap_or(0.0);
 
             unique_exps.insert(expiration, ());
             prelim.push(PrelimRow {
@@ -237,6 +294,24 @@ impl OptionScraper {
                 gamma,
                 delta,
                 open_interest,
+                bid,
+                bid_size,
+                ask,
+                ask_size,
+                vega,
+                theta,
+                rho,
+                theo,
+                change,
+                open,
+                high,
+                low,
+                tick,
+                last_trade_price,
+                last_trade_time,
+                percent_change,
+                prev_day_close,
+                volume,
             });
         }
 
@@ -310,6 +385,24 @@ impl OptionScraper {
                 gamma: r.gamma,
                 delta: r.delta,
                 open_interest: r.open_interest,
+                bid: r.bid,
+                bid_size: r.bid_size,
+                ask: r.ask,
+                ask_size: r.ask_size,
+                vega: r.vega,
+                theta: r.theta,
+                rho: r.rho,
+                theo: r.theo,
+                change: r.change,
+                open: r.open,
+                high: r.high,
+                low: r.low,
+                tick: r.tick,
+                last_trade_price: r.last_trade_price,
+                last_trade_time: r.last_trade_time,
+                percent_change: r.percent_change,
+                prev_day_close: r.prev_day_close,
+                volume: r.volume,
 
                 years_till_expire: extra.years_frac,
                 risk_free_rate: extra.risk_free_rate,
@@ -326,8 +419,8 @@ impl OptionScraper {
                 put_open_interest: put_oi,
 
                 spot_price,
-                data_update_time: ts_raw.clone(),        // <— clone per row
-                data_update_time_cst: ts_cst.clone(),    // <— clone per row
+                data_update_time: ts_raw.clone(), // <— clone per row
+                data_update_time_cst: ts_cst.clone(), // <— clone per row
             });
         }
 
@@ -349,6 +442,24 @@ pub struct OptionRow {
     pub gamma: f64,
     pub delta: f64,
     pub open_interest: u64,
+    pub bid: f64,
+    pub bid_size: f64,
+    pub ask: f64,
+    pub ask_size: f64,
+    pub vega: f64,
+    pub theta: f64,
+    pub rho: f64,
+    pub theo: f64,
+    pub change: f64,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub tick: String,
+    pub last_trade_price: f64,
+    pub last_trade_time: String,
+    pub percent_change: f64,
+    pub prev_day_close: f64,
+    pub volume: f64,
 
     pub years_till_expire: f64, // busday_count/252 (Python called this days_till_expire)
     pub risk_free_rate: f64,
@@ -384,6 +495,24 @@ struct PrelimRow {
     gamma: f64,
     delta: f64,
     open_interest: u64,
+    bid: f64,
+    bid_size: f64,
+    ask: f64,
+    ask_size: f64,
+    vega: f64,
+    theta: f64,
+    rho: f64,
+    theo: f64,
+    change: f64,
+    open: f64,
+    high: f64,
+    low: f64,
+    tick: String,
+    last_trade_price: f64,
+    last_trade_time: String,
+    percent_change: f64,
+    prev_day_close: f64,
+    volume: f64,
 }
 
 #[derive(Debug)]
