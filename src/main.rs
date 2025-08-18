@@ -27,32 +27,32 @@ fn main() -> Result<(), String> {
     let rows = sc.scrape_data()?;
 
     // Save results and capture changes
-    save_with_change_capture(ticker, &rows)?;
+    let file_to_print = save_with_change_capture(ticker, &rows)?;
+    let text = fs::read_to_string(file_to_print).map_err(|e| e.to_string())?;
+    println!("{}", text);
 
     Ok(())
 }
 
-fn save_with_change_capture(ticker: &str, rows: &[OptionRow]) -> Result<(), String> {
+fn save_with_change_capture(ticker: &str, rows: &[OptionRow]) -> Result<PathBuf, String> {
     let out_dir = Path::new("data").join(ticker);
     fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
 
     // locate previous run before writing new files
     let prev_file = find_latest_file(&out_dir, ticker);
-
-    // If previous exists, mark it inactive and compute diffs
-    let mut changes: Vec<ChangeRecord> = Vec::new();
-    if let Some(prev_path) = &prev_file {
+    let prev_rows: Option<Vec<OptionRow>> = if let Some(prev_path) = &prev_file {
         let prev_text = fs::read_to_string(prev_path).map_err(|e| e.to_string())?;
-        let mut prev_rows: Vec<OptionRow> =
-            serde_json::from_str(&prev_text).map_err(|e| e.to_string())?;
-        for r in prev_rows.iter_mut() {
-            r.active = false;
-        }
-        let prev_json = serde_json::to_string_pretty(&prev_rows).map_err(|e| e.to_string())?;
-        fs::write(prev_path, prev_json).map_err(|e| e.to_string())?;
+        Some(serde_json::from_str(&prev_text).map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
 
+    // compute diffs against previous run without altering previous file yet
+    let mut changes: Vec<ChangeRecord> = Vec::new();
+    if let Some(prev_rows) = &prev_rows {
         let prev_map: HashMap<String, OptionRow> = prev_rows
-            .into_iter()
+            .iter()
+            .cloned()
             .map(|r| (r.option.clone(), r))
             .collect();
         let curr_map: HashMap<String, OptionRow> = rows
@@ -98,7 +98,22 @@ fn save_with_change_capture(ticker: &str, rows: &[OptionRow]) -> Result<(), Stri
         }
     }
 
-    // write new raw file
+    // If no changes and previous file exists, reuse it
+    if changes.is_empty() {
+        if let Some(prev_path) = prev_file {
+            return Ok(prev_path);
+        }
+    }
+
+    // Otherwise mark previous inactive and write new file
+    if let (Some(prev_path), Some(mut prev_rows)) = (prev_file, prev_rows) {
+        for r in prev_rows.iter_mut() {
+            r.active = false;
+        }
+        let prev_json = serde_json::to_string_pretty(&prev_rows).map_err(|e| e.to_string())?;
+        fs::write(prev_path, prev_json).map_err(|e| e.to_string())?;
+    }
+
     let ts = Local::now().format("%Y%m%d_%H%M").to_string();
     let raw_path = out_dir.join(format!("{}_{}.json", ticker, ts));
     let json = serde_json::to_string_pretty(rows).map_err(|e| e.to_string())?;
@@ -110,7 +125,7 @@ fn save_with_change_capture(ticker: &str, rows: &[OptionRow]) -> Result<(), Stri
         fs::write(cdc_path, cdc_json).map_err(|e| e.to_string())?;
     }
 
-    Ok(())
+    Ok(raw_path)
 }
 
 #[derive(Serialize, Deserialize)]
